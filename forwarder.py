@@ -25,6 +25,7 @@ from model.protocol_model import MsgDataDTO, MsgHealthDTO, MsgSampleDTO, MsgType
 from model.tag_model import TagConversion, TagSettings
 from opcua_server.server import NorthboundServer, TagNodeSpec
 from opcua_server.values import infer_variant_type, status_for_error
+from utils.message_log import MessageLog
 from zeromq_client.sub_client import ZmqSubClient
 from zeromq_client.topics import sub_topics_for
 
@@ -48,6 +49,7 @@ class Forwarder:
         *,
         ipc: ZmqSubClient | None = None,
         server: NorthboundServer | None = None,
+        message_log: MessageLog | None = None,
     ) -> None:
         self.settings = settings
         app = settings.app
@@ -63,6 +65,7 @@ class Forwarder:
             topic_root=app.zmq.topic_root,
         )
         self.server = server or NorthboundServer(app.opcua)
+        self.message_log = message_log or MessageLog(app.ipc_log)
         self._index: dict[tuple[str, str, str], list[TagSettings]] = {}
         for tag in settings.tags:
             if tag.enabled:
@@ -93,11 +96,13 @@ class Forwarder:
                         await task
         finally:
             self.ipc.close()
+            self.message_log.close()
             await self.server.stop()
 
     async def handle(self, msg: IpcMessage) -> None:
         """메시지 1건 처리. ack / cmd 는 무시한다."""
         self.messages_received += 1
+        self.message_log.record(msg)
         try:
             if msg.header.msg_type is MsgTypeEnum.DATA:
                 await self._on_data(msg)
@@ -143,6 +148,12 @@ class Forwarder:
                     self.ipc._target(),
                     self.ipc.topics,
                 )
+                ipc_log = self.settings.app.ipc_log
+                logger.info(
+                    "IPC 메시지 로그: summary=%s file=%s",
+                    ipc_log.summary,
+                    f"{self.message_log.root}/{{device_key}}" if ipc_log.file_enable else "off",
+                )
                 return True
             except ClientError as e:
                 logger.error("ZeroMQ connect failed: %s(%s) %s", e.code.value, e.code.label, e.detail or e)
@@ -164,9 +175,10 @@ class Forwarder:
                 logger.exception("[%s] 메시지 처리 실패", msg.topic)
 
     async def _watch_loop(self) -> None:
-        """수신 공백 감시 + 카운터 갱신 (1초 주기)."""
+        """수신 공백 감시 + 카운터 갱신 + 메시지 로그 정리 (1초 주기)."""
         stale_ms = self.settings.app.source_stale_ms
         while True:
+            self.message_log.maybe_cleanup()
             await asyncio.sleep(1.0)
             await self.server.set_counters(received=self.messages_received, invalid=self.messages_invalid)
             if stale_ms <= 0:

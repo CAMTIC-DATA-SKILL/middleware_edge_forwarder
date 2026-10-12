@@ -13,6 +13,8 @@ class IpcMessage:
     kind: str
     header: ProtocolHeaderDTO
     topic: str = ""
+    # 토픽에서 온 collector_address (= collector 의 device_key). 없으면 body/header 값 사용
+    address: str = ""
 
     @property
     def device_key(self) -> str:

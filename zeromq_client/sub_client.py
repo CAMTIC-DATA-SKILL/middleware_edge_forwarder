@@ -77,4 +77,9 @@ class ZmqSubClient(BaseZmqClient):
             )
 
         logger.debug("zmq sub [%s] %s", topic, header.msg_type.value)
-        return IpcMessage(kind=parsed.kind, header=header, topic=topic)
+        return IpcMessage(
+            kind=parsed.kind,
+            header=header,
+            topic=topic,
+            address=parsed.collector_address,
+        )

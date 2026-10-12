@@ -42,6 +42,9 @@ opcua_server/
 tester/
   fake_collector.py        # collector-plc 와 같은 와이어로 DATA/HEALTH PUB
   opcua_reader.py          # 북향 주소 공간 값·품질 출력
+utils/
+  logging_setup.py         # 콘솔 로깅
+  message_log.py           # IPC 수신 메시지 요약(콘솔) + 전문(일별 파일)
 tag_map.example.json       # tag map 예시 (tag_map.json 으로 복사)
 systemd/, service_add.sh   # 서비스 등록
 ```
@@ -84,6 +87,33 @@ collector가 여러 개(포트가 다름)라면 `ZMQ_SUB_ENDPOINTS`에 쉼표로
 | `SOURCE_STALE_MS` | `10000` | 이 시간 동안 DATA가 없으면 해당 수집원 태그를 Uncertain 처리 (0 = 끔) |
 
 전체 목록은 `.env.example`을 참고합니다.
+
+### 수신 메시지 로그
+
+| 출력 | 위치 | 설정 |
+| --- | --- | --- |
+| 요약 (메시지당 한 줄) | 콘솔 / journal | `IPC_LOG_SUMMARY=true` |
+| 전문 (헤더+body JSON) | `/data/logs/{device_key}/{YYYY-MM-DD}.log` | `IPC_LOG_FILE=true` |
+
+```text
+# 콘솔
+2026-10-12 17:50:01 [INFO] ipc: DATA plc/plc-mitsubishi-1 samples=5 errors=1
+2026-10-12 17:50:01 [INFO] ipc: HEALTH plc/plc-mitsubishi-1 device_ok=False reason=E-1001
+
+# /data/logs/plc-mitsubishi-1/2026-10-12.log
+2026-10-12T17:50:01.123 [DATA] {"msg_id":"…","collector_address":"plc-mitsubishi-1","msg_type":"data","msg_body":{…},…}
+```
+
+- 폴더 이름은 토픽 `collector.{kind}.{device_key}.{msg_type}`의 `device_key`입니다. 새 장비가 들어오면 폴더가 자동으로 생깁니다. 경로에 쓸 수 없는 문자(`/`, `..` 등)는 `_`로 바뀝니다.
+- 파일명 날짜 기준으로 보관 기간이 지난 파일을 지웁니다. 이 프로세스가 기록한 device_key 폴더 안의 `YYYY-MM-DD.log`만 대상이며, `/data/logs`의 다른 파일은 건드리지 않습니다. 스케줄은 `.env`로 정합니다.
+
+  | 변수 | 기본값 | 설명 |
+  | --- | --- | --- |
+  | `IPC_LOG_RETENTION_DAYS` | `7` | 오늘 포함 최근 N일만 보관 (0 = 삭제 안 함) |
+  | `IPC_LOG_CLEAN_HOUR` | `3` | 매일 이 시각(로컬, 0~23)에 정리 |
+  | `IPC_LOG_CLEAN_ON_START` | `true` | 기동 후 device 폴더를 처음 기록할 때도 정리 |
+- 실행 계정이 `/data/logs`에 폴더를 만들 수 있어야 합니다 (예: `sudo mkdir -p /data/logs && sudo chown collector: /data/logs`). 쓰기에 실패하면 에러 로그를 한 번 남기고 파일 기록만 끄며, 서비스는 계속 동작합니다.
+- Windows 개발 환경에서는 현재 드라이브의 `\data\logs`(예: `D:\data\logs`)에 생깁니다.
 
 ## 북향 주소 공간
 

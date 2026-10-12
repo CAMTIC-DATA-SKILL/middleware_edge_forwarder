@@ -17,7 +17,13 @@ from pathlib import Path
 from dotenv import load_dotenv
 from pydantic import ValidationError
 
-from model.app_model import AppSettings, OpcUaServerSettings, Settings, ZmqSettings
+from model.app_model import (
+    AppSettings,
+    IpcLogSettings,
+    OpcUaServerSettings,
+    Settings,
+    ZmqSettings,
+)
 from model.tag_model import TagMapFile, TagSettings
 
 BASE_DIR = Path(__file__).resolve().parent
@@ -42,11 +48,15 @@ def _env_list(key: str, default: str = "") -> list[str]:
     return [p.strip() for p in _env_str(key, default).split(",") if p.strip()]
 
 
-def _tag_map_path() -> Path:
-    path = Path(_env_str("TAG_MAP_FILE", "tag_map.json"))
+def _env_path(key: str, default: str) -> Path:
+    path = Path(_env_str(key, default))
     if not path.is_absolute():
         path = BASE_DIR / path
     return path
+
+
+def _tag_map_path() -> Path:
+    return _env_path("TAG_MAP_FILE", "tag_map.json")
 
 
 def _load_tags(path: Path) -> list[TagSettings]:
@@ -84,6 +94,13 @@ def _load_app_from_env() -> AppSettings:
             ),
             auto_create_nodes=_env_bool("OPCUA_AUTO_CREATE_NODES", True),
             auto_root=_env_str("OPCUA_AUTO_ROOT", "Collectors"),
+        ),
+        ipc_log=IpcLogSettings(
+            summary=_env_bool("IPC_LOG_SUMMARY", True),
+            file_enable=_env_bool("IPC_LOG_FILE", True),
+            retention_days=_env_int("IPC_LOG_RETENTION_DAYS", 7),
+            clean_hour=_env_int("IPC_LOG_CLEAN_HOUR", 3),
+            clean_on_start=_env_bool("IPC_LOG_CLEAN_ON_START", True),
         ),
     )
 

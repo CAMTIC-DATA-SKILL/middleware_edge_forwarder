@@ -35,6 +35,19 @@ class OpcUaServerSettings(BaseModel):
     auto_root: str = "Collectors"
 
 
+class IpcLogSettings(BaseModel):
+    """IPC 수신 메시지 로그: 콘솔 요약 + device_key 별 일별 파일 전문 (/data/logs/{device_key})."""
+
+    summary: bool = True
+    file_enable: bool = True
+    # 파일명 날짜 기준. 오늘 포함 최근 N일만 남긴다 (0 = 삭제 안 함)
+    retention_days: int = 7
+    # 매일 이 시각(로컬, 0~23시)에 정리
+    clean_hour: int = Field(default=3, ge=0, le=23)
+    # 기동 후 device 폴더를 처음 기록할 때도 정리
+    clean_on_start: bool = True
+
+
 class AppSettings(BaseModel):
     log_level: str = "INFO"
     reconnect_period_ms: int = 5000
@@ -42,6 +55,7 @@ class AppSettings(BaseModel):
     source_stale_ms: int = 10000
     zmq: ZmqSettings = Field(default_factory=ZmqSettings)
     opcua: OpcUaServerSettings = Field(default_factory=OpcUaServerSettings)
+    ipc_log: IpcLogSettings = Field(default_factory=IpcLogSettings)
 
 
 class Settings(BaseModel):
