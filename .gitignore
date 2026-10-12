@@ -218,3 +218,6 @@ __marimo__/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# 현장별 북향 태그 매핑 (tag_map.example.json 을 복사해서 사용)
+tag_map.json

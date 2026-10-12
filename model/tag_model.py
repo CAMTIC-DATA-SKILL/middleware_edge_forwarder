@@ -1,0 +1,111 @@
+"""tag map 스키마: collector 샘플(kind, device_key, addr) → 북향 OPC UA 노드."""
+
+from __future__ import annotations
+
+from typing import Literal
+
+from pydantic import BaseModel, Field, field_validator, model_validator
+
+# 북향 상태 노드 루트. 태그 경로로 쓸 수 없다
+RESERVED_ROOT = "_Forwarder"
+
+OpcUaDataType = Literal[
+    "Boolean",
+    "SByte",
+    "Byte",
+    "Int16",
+    "UInt16",
+    "Int32",
+    "UInt32",
+    "Int64",
+    "UInt64",
+    "Float",
+    "Double",
+    "String",
+]
+
+
+def _no_dot(v: str) -> str:
+    # 토픽 collector.{kind}.{device_key}.{msg_type} 계층용
+    if not v or "." in v:
+        raise ValueError(f"'.' 없는 비어 있지 않은 값이어야 합니다: {v!r}")
+    return v
+
+
+class TagSource(BaseModel):
+    kind: str = "plc"
+    device_key: str
+    addr: str
+
+    _validate_kind = field_validator("kind")(_no_dot)
+    _validate_device_key = field_validator("device_key")(_no_dot)
+
+    @property
+    def key(self) -> tuple[str, str, str]:
+        return (self.kind, self.device_key, self.addr)
+
+
+class TagTarget(BaseModel):
+    # Objects 아래 객체 경로. 예) Factory/Line01/Press01
+    path: str
+    name: str
+    data_type: OpcUaDataType
+    unit: str = ""
+    description: str = ""
+
+    @property
+    def segments(self) -> tuple[str, ...]:
+        return tuple(s for s in self.path.split("/") if s)
+
+    @model_validator(mode="after")
+    def _check_path(self) -> TagTarget:
+        if not self.segments:
+            raise ValueError(f"target.path 가 비어 있습니다: {self.path!r}")
+        if self.segments[0] == RESERVED_ROOT:
+            raise ValueError(f"target.path 첫 세그먼트로 {RESERVED_ROOT} 를 쓸 수 없습니다")
+        if not self.name:
+            raise ValueError("target.name 이 비어 있습니다")
+        return self
+
+
+class TagConversion(BaseModel):
+    scale: float = 1.0
+    offset: float = 0.0
+
+    def apply(self, value: object) -> object:
+        """제공값 = 원본값 × scale + offset. 숫자가 아니면 그대로 둔다."""
+        if isinstance(value, bool) or not isinstance(value, (int, float)):
+            return value
+        if self.scale == 1.0 and self.offset == 0.0:
+            return value
+        return value * self.scale + self.offset
+
+
+class TagSettings(BaseModel):
+    tag_id: str
+    enabled: bool = True
+    source: TagSource
+    target: TagTarget
+    conversion: TagConversion = Field(default_factory=TagConversion)
+
+
+class TagMapFile(BaseModel):
+    tags: list[TagSettings] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _unique(self) -> TagMapFile:
+        seen_ids: set[str] = set()
+        seen_targets: set[tuple[tuple[str, ...], str]] = set()
+        for tag in self.tags:
+            if tag.tag_id in seen_ids:
+                raise ValueError(f"중복된 tag_id: {tag.tag_id}")
+            seen_ids.add(tag.tag_id)
+            if not tag.enabled:
+                continue
+            target_key = (tag.target.segments, tag.target.name)
+            if target_key in seen_targets:
+                raise ValueError(
+                    f"같은 경로에 같은 이름의 태그: {tag.target.path}/{tag.target.name}"
+                )
+            seen_targets.add(target_key)
+        return self

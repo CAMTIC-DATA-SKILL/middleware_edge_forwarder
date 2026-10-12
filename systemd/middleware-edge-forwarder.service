@@ -1,0 +1,24 @@
+[Unit]
+Description=Edge Forwarder (collector ZeroMQ -> northbound OPC UA)
+After=network-online.target collector-plc.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=collector
+Group=collector
+
+WorkingDirectory=/opt/middleware_edge_forwarder
+EnvironmentFile=/etc/middleware_edge_forwarder/.env
+ExecStart=/opt/middleware_edge_forwarder/.venv/bin/python main.py
+
+Restart=on-failure
+RestartSec=5
+TimeoutStopSec=30
+
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=middleware-edge-forwarder
+
+[Install]
+WantedBy=multi-user.target

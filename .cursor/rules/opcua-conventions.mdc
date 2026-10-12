@@ -1,0 +1,25 @@
+---
+description: 북향 OPC UA 서버·tag map 규칙
+globs: opcua_server/**/*.py,forwarder.py,model/tag_model.py
+alwaysApply: false
+---
+
+# OPC UA Conventions
+
+## NodeId
+- 변수: `ns=<OPCUA_NAMESPACE_URI>;s=<tag_id>` 고정 (상위 시스템 주소가 바뀌지 않게)
+- 객체: `s=<path 세그먼트를 / 로 이은 값>`
+- auto 노드 tag_id: `{kind}.{device_key}.{addr}`, 경로 `{OPCUA_AUTO_ROOT}/{kind}/{device_key}`
+- `_Forwarder`는 상태 노드 예약 이름 (tag map path 첫 세그먼트 금지)
+
+## 값·품질
+- 값 쓰기는 `NorthboundServer.update`만 사용 (형식 변환 `opcua_server.values.coerce_value`)
+- SourceTimestamp = DATA `sample_ms`
+- 샘플 error → `status_for_error` (Bad, 값 null)
+- HEALTH device_ok=false / SOURCE_STALE_MS 초과 → `mark_source_tags(UncertainLastUsableValue)` (마지막 값·발생 시각 유지)
+- 상위 쓰기 허용하지 않음, 보안은 현재 NoSecurity
+
+## tag map
+- `source.addr`는 collector DATA `addr` 문자열과 완전 일치
+- `data_type`은 `model.tag_model.OpcUaDataType` 범위만
+- 변환: 원본 × scale + offset (숫자만)

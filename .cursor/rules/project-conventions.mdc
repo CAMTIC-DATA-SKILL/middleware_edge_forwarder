@@ -1,0 +1,27 @@
+---
+description: middleware_edge_forwarder 공통 구조·임포트 규칙
+alwaysApply: true
+---
+
+# Project Conventions
+
+## Layout
+- 진입: `main.py` → `utils.logging_setup` → `forwarder.run` (asyncio)
+- 설정: `.env` + `tag_map.json` → `config.settings`
+- 패키지: `zeromq_client/` (collector SUB), `opcua_server/` (북향), `model/` (DTO·설정·에러코드), `client/errors.py`, `utils/`
+- 흐름: IPC → `IpcMessage` → `Forwarder.handle` → `NorthboundServer.update`
+- IPC 방식은 미확정. 새 IPC는 `IpcMessage`를 돌려주는 `recv()`만 구현하고 `forwarder.py`·`opcua_server/`는 건드리지 않는다
+
+## Protocol
+- 와이어는 collector-plc와 동일: `ProtocolHeaderDTO` + body (`MsgDataDTO`, `MsgHealthDTO`)
+- 이 프로세스는 수신 전용. cmd_r/cmd_w 송신 금지 (embedded_ingest 담당), ack는 버린다
+- 결과 코드는 `model.error_model.ClientErrorCode` (collector 레포와 같은 값 유지)
+
+## No `__init__.py`
+- `__init__.py`를 만들지 않는다. 임포트는 모듈 경로 직접: `from opcua_server.server import NorthboundServer`
+
+## Python style
+- 새 모듈 상단에 `from __future__ import annotations`
+- 모듈 docstring은 짧은 한국어로 역할만
+- `logger = logging.getLogger(__name__)`
+- 실기기 설정(`.env`, `tag_map.json`)은 커밋하지 않는다

@@ -1,0 +1,29 @@
+---
+description: collector ZeroMQ SUB·토픽 규칙
+globs: zeromq_client/**/*.py,forwarder.py,model/app_model.py,model/ipc_model.py,config.py
+alwaysApply: false
+---
+
+# ZeroMQ Conventions
+
+## 역할
+- collector(`collector-plc` 등)가 PUB을 **bind**, forwarder는 SUB로 **connect** (embedded_ingest와 같은 PUB에 나란히 붙음)
+- collector가 여럿이면 `ZMQ_SUB_ENDPOINTS` 쉼표 목록 → SUB 소켓 하나로 모두 connect
+
+## 토픽
+형식: `collector.{kind}.{device_key}.{msg_type}`
+
+```text
+collector.plc.plc-mitsubishi-1.data
+collector.plc.plc-mitsubishi-1.health
+```
+
+- kind·device_key에 `.` 금지 (토픽 세그먼트)
+- 구독 prefix: kinds 없음 → `collector.`, device_keys 없음 → `collector.{kind}.`, 둘 다 → `…{device_key}.{data|health}`
+- kind는 토픽에서만 얻는다 (헤더에 없음). 조립·해석은 `zeromq_client.topics`만 사용
+- body `device_key` 우선, 없으면 header `collector_address`
+
+## 소켓
+- multipart: `[topic_utf8, header_json_utf8]`
+- `zmq.asyncio` 사용. recv는 취소로 종료 (RCVTIMEO 폴링 안 함)
+- 파싱 실패는 `ClientError(PROTOCOL_ERROR)` → forwarder가 `MessagesInvalid` 카운트 후 계속
