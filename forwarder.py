@@ -80,6 +80,7 @@ class Forwarder:
         await self.server.start()
         try:
             await self._register_mapped_tags()
+            self.message_log.check_writable()
             if not await self._connect_ipc(stop):
                 return
             tasks = [
@@ -147,12 +148,6 @@ class Forwarder:
                     "ZeroMQ SUB ready %s topics=%s",
                     self.ipc._target(),
                     self.ipc.topics,
-                )
-                ipc_log = self.settings.app.ipc_log
-                logger.info(
-                    "IPC 메시지 로그: summary=%s file=%s",
-                    ipc_log.summary,
-                    f"{self.message_log.root}/{{device_key}}" if ipc_log.file_enable else "off",
                 )
                 return True
             except ClientError as e:

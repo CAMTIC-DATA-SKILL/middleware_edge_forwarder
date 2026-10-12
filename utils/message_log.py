@@ -14,7 +14,9 @@ device_key 는 토픽 collector.{kind}.{device_key}.{msg_type} 에서 가져온�
 from __future__ import annotations
 
 import logging
+import os
 import re
+import time
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 from pathlib import Path
@@ -25,6 +27,7 @@ from model.ipc_model import IpcMessage
 from model.protocol_model import MsgTypeEnum
 
 LOG_ROOT = Path("/data/logs")
+_RETRY_S = 60
 
 logger = logging.getLogger(__name__)
 summary_logger = logging.getLogger("ipc")
@@ -63,7 +66,8 @@ class MessageLog:
     def __init__(self, cfg: IpcLogSettings, *, root: Path = LOG_ROOT) -> None:
         self.cfg = cfg
         self.root = root
-        self._file_enabled = cfg.file_enable
+        # 쓰기 실패 시 이 시각(monotonic)까지 파일 기록을 쉬고 다시 시도한다
+        self._suspended_until: float | None = None
         self._files: dict[str, _DayFile] = {}
         # 이번 기동에서 기록한 device 폴더 (정리 대상)
         self._folders: set[str] = set()
@@ -71,11 +75,34 @@ class MessageLog:
         self._pending_folders: set[str] = set()
         self._next_clean = self._next_clean_time(datetime.now())
 
+    def check_writable(self) -> bool:
+        """기동 시 로그 루트에 쓸 수 있는지 확인하고 결과를 로그로 남긴다."""
+        if not self.cfg.file_enable:
+            logger.info("IPC 메시지 파일 기록 꺼짐 (IPC_LOG_FILE=false)")
+            return False
+        probe = self.root / f".write_test_{os.getpid()}"
+        try:
+            self.root.mkdir(parents=True, exist_ok=True)
+            probe.write_text("", encoding="utf-8")
+            probe.unlink()
+        except OSError as e:
+            logger.error(
+                "IPC 메시지 파일을 %s 에 쓸 수 없습니다: %s "
+                "(예: sudo mkdir -p %s && sudo chown <실행 계정>: %s). %d초마다 다시 시도합니다",
+                self.root, e, self.root, self.root, _RETRY_S,
+            )
+            return False
+        logger.info("IPC 메시지 파일 기록: %s/{device_key}/{YYYY-MM-DD}.log", self.root)
+        return True
+
     def record(self, msg: IpcMessage) -> None:
         if self.cfg.summary:
             summary_logger.info(summarize(msg))
-        if self._file_enabled:
-            self._write(msg)
+        if not self.cfg.file_enable:
+            return
+        if self._suspended_until is not None and time.monotonic() < self._suspended_until:
+            return
+        self._write(msg)
 
     def maybe_cleanup(self, now: datetime | None = None) -> None:
         """기동 시(새 device 폴더) + 매일 IPC_LOG_CLEAN_HOUR 시에 보관 기간이 지난 파일을 지운다."""
@@ -140,10 +167,14 @@ class MessageLog:
                 f = self._open(folder, day)
             f.stream.write(line)
         except OSError as e:
-            # 디렉터리 권한·디스크 문제로 매 메시지마다 실패하지 않도록 파일 기록만 끈다
-            self._file_enabled = False
+            # 권한·디스크 문제로 매 메시지마다 실패하지 않도록 잠시 쉬었다가 다시 시도한다
+            self._suspended_until = time.monotonic() + _RETRY_S
             self.close()
-            logger.error("IPC 메시지 파일 기록을 끕니다 (%s): %s", self.root, e)
+            logger.error("IPC 메시지 파일 기록 실패 (%s): %s. %d초 뒤 다시 시도합니다", self.root / folder, e, _RETRY_S)
+            return
+        if self._suspended_until is not None:
+            self._suspended_until = None
+            logger.info("IPC 메시지 파일 기록 재개: %s", self.root / folder)
 
     def _open(self, folder: str, day: str) -> _DayFile:
         old = self._files.pop(folder, None)
