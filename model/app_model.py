@@ -36,7 +36,7 @@ class OpcUaServerSettings(BaseModel):
 
 
 class IpcLogSettings(BaseModel):
-    """IPC 수신 메시지 로그: 콘솔 요약 + device_key 별 일별 파일 전문 (/data/logs/{device_key})."""
+    """IPC 수신 메시지 로그: 콘솔 요약 + device_key 별 일별 파일 전문 ({프로젝트 루트}/data/logs/{device_key})."""
 
     summary: bool = True
     file_enable: bool = True

@@ -4,10 +4,10 @@ IPC 수신 메시지 로그.
 | 출력 | 위치 | 내용 |
 |------|------|------|
 | 요약 | 콘솔 (logger `ipc`, INFO) | 메시지당 한 줄: 타입, 수집원, 샘플/오류 수 또는 health 상태 |
-| 전문 | /data/logs/{device_key}/{YYYY-MM-DD}.log | 수신 시각 + ProtocolHeaderDTO JSON 한 줄 |
+| 전문 | {프로젝트 루트}/data/logs/{device_key}/{YYYY-MM-DD}.log | 수신 시각 + ProtocolHeaderDTO JSON 한 줄 |
 
 device_key 는 토픽 collector.{kind}.{device_key}.{msg_type} 에서 가져온다.
-보관 기간 정리는 이 프로세스가 기록한 device_key 폴더 안에서만 한다 (/data/logs 의 다른 파일은 건드리지 않음).
+보관 기간 정리는 이 프로세스가 기록한 device_key 폴더 안에서만 한다.
 정리 시점: 기동 후 폴더를 처음 기록할 때(IPC_LOG_CLEAN_ON_START) + 매일 IPC_LOG_CLEAN_HOUR 시.
 """
 
@@ -22,11 +22,12 @@ from datetime import date, datetime, timedelta
 from pathlib import Path
 from typing import TextIO
 
+from config import BASE_DIR
 from model.app_model import IpcLogSettings
 from model.ipc_model import IpcMessage
 from model.protocol_model import MsgTypeEnum
 
-LOG_ROOT = Path("/data/logs")
+LOG_ROOT = BASE_DIR / "data" / "logs"
 _RETRY_S = 60
 
 logger = logging.getLogger(__name__)
