@@ -20,7 +20,7 @@ from pydantic import ValidationError
 
 from client.errors import ClientError
 from model.app_model import Settings
-from model.ipc_model import IpcMessage, source_id
+from model.ipc_model import IpcMessage, collector_ref, source_id
 from model.protocol_model import MsgDataDTO, MsgHealthDTO, MsgSampleDTO, MsgTypeEnum
 from model.tag_model import CollectorHeader, TagConversion, TagSettings, identification_placements
 from opcua_server.server import NorthboundServer, TagNodeSpec
@@ -77,6 +77,13 @@ class Forwarder:
         self._auto_skipped: set[str] = set()
         self.messages_received = 0
         self.messages_invalid = 0
+
+    def _collector_ref(self, kind: str, device_key: str) -> str:
+        return collector_ref(kind, device_key, root=self.settings.app.zmq.topic_root)
+
+    def _collector_ref_sid(self, sid: str) -> str:
+        kind, _, device_key = sid.partition("/")
+        return self._collector_ref(kind, device_key) if device_key else sid
 
     async def run(self, stop: asyncio.Event | None = None) -> None:
         stop = stop or asyncio.Event()
@@ -201,7 +208,7 @@ class Forwarder:
                 state.stale = True
                 await self.server.set_source_state(sid, stale=True)
                 n = await self.server.mark_source_tags(sid, _UNCERTAIN)
-                logger.warning("[%s] DATA %dms 동안 없음 → 태그 %d개 Uncertain", sid, stale_ms, n)
+                logger.warning("[%s] DATA %dms 동안 없음 → 태그 %d개 Uncertain", self._collector_ref_sid(sid), stale_ms, n)
 
     async def _on_data(self, msg: IpcMessage) -> None:
         body = MsgDataDTO.model_validate(msg.header.msg_body)
@@ -224,7 +231,7 @@ class Forwarder:
         if state.stale:
             state.stale = False
             await self.server.set_source_state(sid, stale=False)
-            logger.info("[%s] DATA 수신 재개", sid)
+            logger.info("[%s] DATA 수신 재개", self._collector_ref(msg.kind, body.device_key))
         await self.server.set_source_state(sid, last_data=datetime.now(timezone.utc))
 
     async def _on_health(self, msg: IpcMessage) -> None:
@@ -237,10 +244,15 @@ class Forwarder:
         await self.server.set_source_state(sid, device_ok=body.device_ok, reason=body.reason or "")
         if body.device_ok:
             if changed:
-                logger.info("[%s] HEALTH device_ok=true", sid)
+                logger.info("[%s] HEALTH device_ok=true", self._collector_ref(msg.kind, body.device_key))
             return
         n = await self.server.mark_source_tags(sid, _UNCERTAIN)
-        logger.warning("[%s] HEALTH device_ok=false reason=%s → 태그 %d개 Uncertain", sid, body.reason, n)
+        logger.warning(
+            "[%s] HEALTH device_ok=false reason=%s → 태그 %d개 Uncertain",
+            self._collector_ref(msg.kind, body.device_key),
+            body.reason,
+            n,
+        )
 
     async def _ensure_collector_identification(self, kind: str, device_key: str) -> None:
         """수신한 collector id 로 헤더를 찾아 Identification 을 붙인다."""

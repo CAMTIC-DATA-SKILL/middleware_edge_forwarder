@@ -28,7 +28,21 @@ class IpcMessage:
     def source_id(self) -> str:
         return source_id(self.kind, self.device_key)
 
+    @property
+    def collector_ref(self) -> str:
+        """로그용 토픽 접두사. 예: collector.robot.robot-1"""
+        if self.topic:
+            parts = [p for p in self.topic.split(".") if p]
+            if len(parts) >= 3:
+                return ".".join(parts[:3])
+        return collector_ref(self.kind, self.device_key)
+
 
 def source_id(kind: str, device_key: str) -> str:
     """수집원 식별자. 북향 상태 노드 경로(_Forwarder/Sources/{kind}/{device_key})로도 쓴다."""
     return f"{kind}/{device_key}"
+
+
+def collector_ref(kind: str, device_key: str, *, root: str = "collector") -> str:
+    """ZeroMQ 토픽과 같은 collector.{kind}.{device_key}."""
+    return f"{root}.{kind}.{device_key}"

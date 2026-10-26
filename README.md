@@ -97,11 +97,11 @@ collector가 여러 개(포트가 다름)라면 `ZMQ_SUB_ENDPOINTS`에 쉼표로
 
 ```text
 # 콘솔
-2026-10-12 17:50:01 [INFO] ipc: DATA plc/plc-mitsubishi-1 samples=5 errors=1
-2026-10-12 17:50:01 [INFO] ipc: HEALTH plc/plc-mitsubishi-1 device_ok=False reason=E-1001
+2026-10-12 17:50:01 [INFO] ipc: DATA collector.plc.plc-mitsubishi-1 samples=5 errors=1
+2026-10-12 17:50:01 [INFO] ipc: HEALTH collector.plc.plc-mitsubishi-1 device_ok=False reason=E-1001
 
 # data/logs/plc-mitsubishi-1/2026-10-12.log (프로젝트 루트 기준)
-2026-10-12T17:50:01.123 [DATA] {"msg_id":"…","collector_address":"plc-mitsubishi-1","msg_type":"data","msg_body":{…},…}
+2026-10-12T17:50:01.123 [DATA] collector.plc.plc-mitsubishi-1 {"msg_id":"…","collector_address":"plc-mitsubishi-1","msg_type":"data","msg_body":{…},…}
 ```
 
 - 폴더 이름은 토픽 `collector.{kind}.{device_key}.{msg_type}`의 `device_key`입니다. 새 장비가 들어오면 폴더가 자동으로 생깁니다. 경로에 쓸 수 없는 문자(`/`, `..` 등)는 `_`로 바뀝니다.

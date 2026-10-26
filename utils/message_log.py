@@ -52,7 +52,7 @@ def device_folder(msg: IpcMessage) -> str:
 
 def summarize(msg: IpcMessage) -> str:
     body = msg.header.msg_body if isinstance(msg.header.msg_body, dict) else {}
-    head = f"{msg.header.msg_type.value.upper()} {msg.source_id}"
+    head = f"{msg.header.msg_type.value.upper()} {msg.collector_ref}"
     if msg.header.msg_type is MsgTypeEnum.DATA:
         samples = body.get("samples")
         samples = samples if isinstance(samples, list) else []
@@ -160,7 +160,7 @@ class MessageLog:
         day = date.today().isoformat()
         line = (
             f"{datetime.now().isoformat(timespec='milliseconds')} "
-            f"[{msg.header.msg_type.value.upper()}] {msg.header.model_dump_json()}\n"
+            f"[{msg.header.msg_type.value.upper()}] {msg.collector_ref} {msg.header.model_dump_json()}\n"
         )
         try:
             f = self._files.get(folder)
