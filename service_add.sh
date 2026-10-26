@@ -1,21 +1,42 @@
 #!/usr/bin/env bash
 # 현재 프로젝트 경로 기준으로 systemd 유닛만 등록·시작한다.
-# 사용: sudo ./service_add.sh
+# 사용: sudo bash service_add.sh
 set -euo pipefail
 
 SERVICE_NAME="middleware-edge-forwarder"
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 UNIT_DST="/etc/systemd/system/${SERVICE_NAME}.service"
 VENV_PYTHON="${ROOT}/.venv/bin/python"
+MAIN_PY="${ROOT}/main.py"
+RUN_USER="${SUDO_USER:-}"
 
 if [[ "${EUID}" -ne 0 ]]; then
-  echo "root 권한이 필요합니다. 예: sudo ./service_add.sh" >&2
+  echo "root 권한이 필요합니다. 예: sudo bash service_add.sh" >&2
   exit 1
 fi
 
 if [[ ! -x "${VENV_PYTHON}" ]]; then
   echo ".venv 가 없습니다: ${VENV_PYTHON}" >&2
+  echo "먼저: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt" >&2
   exit 1
+fi
+
+if [[ ! -f "${MAIN_PY}" ]]; then
+  echo "main.py 가 없습니다: ${MAIN_PY}" >&2
+  exit 1
+fi
+
+if [[ ! -f "${ROOT}/.env" ]]; then
+  echo "경고: ${ROOT}/.env 가 없습니다. .env.example 을 복사해 설정을 맞추세요." >&2
+fi
+
+USER_LINES=""
+if [[ -n "${RUN_USER}" && "${RUN_USER}" != "root" ]]; then
+  if id "${RUN_USER}" &>/dev/null; then
+    USER_LINES="User=${RUN_USER}"$'\n'"Group=${RUN_USER}"
+  else
+    echo "경고: 사용자 ${RUN_USER} 가 없어 root 로 실행합니다." >&2
+  fi
 fi
 
 cat > "${UNIT_DST}" <<EOF
@@ -26,9 +47,11 @@ Wants=network-online.target
 
 [Service]
 Type=simple
+${USER_LINES}
 WorkingDirectory=${ROOT}
+Environment=PYTHONUNBUFFERED=1
 EnvironmentFile=-${ROOT}/.env
-ExecStart=${VENV_PYTHON} main.py
+ExecStart=${VENV_PYTHON} ${MAIN_PY}
 
 Restart=on-failure
 RestartSec=5

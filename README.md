@@ -214,10 +214,16 @@ UaExpert 등에서 `opc.tcp://<엣지 IP>:4840/edge/`로 접속해도 됩니다 
 
 ## 서비스 등록 (Linux)
 
+`.venv` 와 `.env` 를 만든 뒤, 프로젝트 루트에서 등록합니다. 유닛은 현재 경로를 기준으로 생성됩니다 (`systemd/*.service` 는 `/opt` 고정 설치 예시).
+
 ```bash
-sudo ./service_add.sh
+sudo bash service_add.sh
 journalctl -u middleware-edge-forwarder -f
 ```
+
+- `sudo` 한 계정으로 실행합니다. `data/logs` 쓰기 권한과 맞춥니다.
+- collector-plc 가 같은 장비에 있으면 부팅 시 그 다음에 기동합니다. 없어도 등록은 됩니다.
+- 제거: `sudo systemctl disable --now middleware-edge-forwarder && sudo rm /etc/systemd/system/middleware-edge-forwarder.service && sudo systemctl daemon-reload`
 
 ## 개발 현황 / 이후 검토
 

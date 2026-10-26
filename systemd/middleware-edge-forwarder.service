@@ -1,3 +1,4 @@
+# /opt 고정 설치 예시. 현재 체크아웃 경로로 등록하려면 service_add.sh 를 사용한다.
 [Unit]
 Description=Edge Forwarder (collector ZeroMQ -> northbound OPC UA)
 After=network-online.target collector-plc.service
@@ -9,8 +10,9 @@ User=collector
 Group=collector
 
 WorkingDirectory=/opt/middleware_edge_forwarder
-EnvironmentFile=/etc/middleware_edge_forwarder/.env
-ExecStart=/opt/middleware_edge_forwarder/.venv/bin/python main.py
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/opt/middleware_edge_forwarder/.env
+ExecStart=/opt/middleware_edge_forwarder/.venv/bin/python /opt/middleware_edge_forwarder/main.py
 
 Restart=on-failure
 RestartSec=5
