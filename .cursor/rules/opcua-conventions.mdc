@@ -10,7 +10,14 @@ alwaysApply: false
 - 변수: `ns=<OPCUA_NAMESPACE_URI>;s=<tag_id>` 고정 (상위 시스템 주소가 바뀌지 않게)
 - 객체: `s=<path 세그먼트를 / 로 이은 값>`
 - auto 노드 tag_id: `{kind}.{device_key}.{addr}`, 경로 `{OPCUA_AUTO_ROOT}/{kind}/{device_key}`
-- `_Forwarder`는 상태 노드 예약 이름 (tag map path 첫 세그먼트 금지)
+- Identification: `s=<auto_root>/<kind>/<device_key>/Identification/{AasId|GlobalAssetId|DeviceKey}` (collector 헤더 상수, CurrentRead)
+- `_Forwarder`는 상태 노드 예약 이름 (tag map path 첫 세그먼트 금지). AAS id 를 두지 않는다
+
+## collector 헤더
+- 개별 샘플에 AAS 를 달지 않는다. tag map `collectors` 는 `(kind, device_key)` → `aas_id` 헤더다
+- ZeroMQ 토픽/body 의 collector id 로 조회한 뒤 그 collector 객체 아래에 Identification 을 둔다
+- AAS Property 매핑은 상위 뷰어. 이 프로세스는 헤더만 노출한다
+- `aas_id`/`global_asset_id` 가 없으면 Identification 을 만들지 않는다
 
 ## 값·품질
 - 값 쓰기는 `NorthboundServer.update`만 사용 (형식 변환 `opcua_server.values.coerce_value`)

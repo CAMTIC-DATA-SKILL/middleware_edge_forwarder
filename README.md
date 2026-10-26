@@ -123,6 +123,13 @@ Objects
 │   ├── Temperature
 │   └── ProductionCount
 ├── Collectors                  ← auto 노드: {OPCUA_AUTO_ROOT}/{kind}/{device_key}/{addr}
+│   ├── robot
+│   │   └── robot-1
+│   │       ├── Identification
+│   │       │   ├── AasId         collector 헤더 상수
+│   │       │   ├── GlobalAssetId
+│   │       │   └── DeviceKey
+│   │       └── S0004
 │   └── plc
 │       └── plc-mitsubishi-1
 │           ├── D100
@@ -169,6 +176,34 @@ collector 샘플 `(kind, device_key, addr)`을 북향 노드에 연결합니다.
 - `data_type`: `Boolean`, `SByte`, `Byte`, `Int16`, `UInt16`, `Int32`, `UInt32`, `Int64`, `UInt64`, `Float`, `Double`, `String`
 - `conversion`: 제공값 = 원본값 × `scale` + `offset` (숫자만). 소수가 나오면 `data_type`을 `Double`/`Float`로 둡니다. 정수 형식이면 반올림합니다.
 - 같은 샘플을 여러 태그에 연결할 수 있습니다. `target.path` 첫 세그먼트로 `_Forwarder`는 쓸 수 없습니다.
+
+tag map 파일 하나가 이 프로세스의 표입니다. 그 안에 자산과 태그를 여러 개 둘 수 있습니다. 파일을 자산마다 쪼개지 않습니다.
+
+### collector 헤더 (AAS 표시)
+
+개별 라이브 값에 AAS 태그를 달지 않습니다. tag map `collectors` 는 ZeroMQ 로 올라오는 **collector id 헤더**입니다. `(kind, device_key)` 로 조회해 `aas_id` 를 붙이고, 그 collector 객체 아래에 Identification 을 한 번 둡니다.
+
+토픽 `collector.robot.robot-1.data` / body `device_key=robot-1` → 헤더의 `aas_id` → 북향 `Collectors/robot/robot-1/Identification/AasId`.
+
+```json
+{
+  "collectors": [
+    {
+      "kind": "robot",
+      "device_key": "robot-1",
+      "aas_id": "urn:example:aas:hyundai:hh7:pickplace:01",
+      "global_asset_id": "urn:example:asset:hyundai:hh7:pickplace:01"
+    }
+  ]
+}
+```
+
+- 샘플(`S0004` 등)마다 헤더를 쓰지 않습니다. collector 한 대에 행 하나입니다.
+- `.env` 나 DATA 토픽에 AAS id 를 싣지 않습니다. 키는 이 표에만 둡니다.
+- `tags` 는 예전처럼 주소 재배치가 필요할 때만 씁니다. 헤더와 무관합니다.
+- 헤더가 없는 collector 는 값만 나가고 Identification 은 없습니다.
+- BrowseName 은 `Identification`, `AasId`, `GlobalAssetId`, `DeviceKey`. NodeId 예: `ns=;s=Collectors/robot/robot-1/Identification/AasId`.
+- AAS Property 매칭은 상위 뷰어가 합니다.
 
 ### auto 노드 형식
 
@@ -231,6 +266,7 @@ journalctl -u middleware-edge-forwarder -f
 - [x] tag map 기반 북향 노드 + auto 노드
 - [x] 값 형식 변환, scale/offset, 품질 상태, SourceTimestamp 전달
 - [x] HEALTH·수신 공백을 Uncertain 품질과 `_Forwarder` 상태 노드에 반영
+- [x] tag map `collectors` 헤더(collector id → aas_id)를 북향 `Identification` 으로 노출
 - [ ] IPC 방식 확정 (ZeroMQ 유지 시 collector별 엔드포인트/포트 규칙 정리)
 - [ ] 북향 보안 (인증서·사용자 인증). 현재는 NoSecurity
 - [ ] 표준 단위 코드(UNECE)·AnalogItemType 적용 (`middleware_gateway_opc_ua` catalog 참고)

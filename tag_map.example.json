@@ -1,48 +1,10 @@
 {
-  "tags": [
+  "collectors": [
     {
-      "tag_id": "line01.press01.temperature",
-      "enabled": true,
-      "source": { "kind": "plc", "device_key": "plc-sim-1", "addr": "D100" },
-      "target": {
-        "path": "Factory/Line01/Press01",
-        "name": "Temperature",
-        "data_type": "Double",
-        "unit": "°C",
-        "description": "프레스 1호기 금형 온도"
-      },
-      "conversion": { "scale": 0.1, "offset": 0.0 }
-    },
-    {
-      "tag_id": "line01.press01.counter",
-      "enabled": true,
-      "source": { "kind": "plc", "device_key": "plc-sim-1", "addr": "D101~102" },
-      "target": {
-        "path": "Factory/Line01/Press01",
-        "name": "ProductionCount",
-        "data_type": "UInt32",
-        "description": "누적 생산 수량"
-      }
-    },
-    {
-      "tag_id": "line01.press01.running",
-      "enabled": true,
-      "source": { "kind": "plc", "device_key": "plc-sim-1", "addr": "D800.0" },
-      "target": {
-        "path": "Factory/Line01/Press01",
-        "name": "Running",
-        "data_type": "Boolean"
-      }
-    },
-    {
-      "tag_id": "line01.press01.lot",
-      "enabled": true,
-      "source": { "kind": "plc", "device_key": "plc-sim-1", "addr": "D200~204" },
-      "target": {
-        "path": "Factory/Line01/Press01",
-        "name": "LotNo",
-        "data_type": "String"
-      }
+      "kind": "robot",
+      "device_key": "robot-1",
+      "aas_id": "urn:example:aas:hyundai:hh7:pickplace:01",
+      "global_asset_id": "urn:example:asset:hyundai:hh7:pickplace:01"
     }
   ]
 }

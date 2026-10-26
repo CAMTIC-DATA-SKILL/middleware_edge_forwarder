@@ -6,6 +6,8 @@
     settings.app.zmq.sub_endpoints
     for tag in settings.tags:
         print(tag.tag_id, tag.source.key)
+    for header in settings.collectors:
+        print(header.kind, header.device_key, header.aas_id)
 """
 
 from __future__ import annotations
@@ -24,7 +26,7 @@ from model.app_model import (
     Settings,
     ZmqSettings,
 )
-from model.tag_model import TagMapFile, TagSettings
+from model.tag_model import TagMapFile
 
 BASE_DIR = Path(__file__).resolve().parent
 load_dotenv(BASE_DIR / ".env")
@@ -59,13 +61,13 @@ def _tag_map_path() -> Path:
     return _env_path("TAG_MAP_FILE", "tag_map.json")
 
 
-def _load_tags(path: Path) -> list[TagSettings]:
+def _load_tag_map(path: Path) -> TagMapFile:
     try:
         data = json.loads(path.read_text(encoding="utf-8"))
     except json.JSONDecodeError as e:
         raise ValueError(f"tag map JSON 파싱 실패: {path}: {e}") from e
     try:
-        return TagMapFile.model_validate(data).tags
+        return TagMapFile.model_validate(data)
     except ValidationError as e:
         raise ValueError(f"tag map 검증 실패: {path}: {e}") from e
 
@@ -109,7 +111,13 @@ def load_settings() -> Settings:
     path = _tag_map_path()
     if not path.is_file():
         return Settings(app=_load_app_from_env())
-    return Settings(app=_load_app_from_env(), tag_map_file=path, tags=_load_tags(path))
+    tag_map = _load_tag_map(path)
+    return Settings(
+        app=_load_app_from_env(),
+        tag_map_file=path,
+        tags=tag_map.tags,
+        collectors=tag_map.collectors,
+    )
 
 
 settings = load_settings()

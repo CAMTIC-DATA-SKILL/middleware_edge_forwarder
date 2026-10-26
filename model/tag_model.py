@@ -8,6 +8,8 @@ from pydantic import BaseModel, Field, field_validator, model_validator
 
 # 북향 상태 노드 루트. 태그 경로로 쓸 수 없다
 RESERVED_ROOT = "_Forwarder"
+IDENTIFICATION_BROWSE_NAME = "Identification"
+IDENTIFICATION_CHILD_NAMES = ("AasId", "GlobalAssetId", "DeviceKey")
 
 OpcUaDataType = Literal[
     "Boolean",
@@ -81,6 +83,41 @@ class TagConversion(BaseModel):
         return value * self.scale + self.offset
 
 
+class CollectorHeader(BaseModel):
+    """ZeroMQ collector id → AAS 키. 샘플이 아니라 collector 한 대에 대한 헤더다."""
+
+    kind: str
+    device_key: str
+    aas_id: str = ""
+    global_asset_id: str = ""
+
+    _validate_kind = field_validator("kind")(_no_dot)
+    _validate_device_key = field_validator("device_key")(_no_dot)
+
+    @property
+    def key(self) -> tuple[str, str]:
+        return (self.kind, self.device_key)
+
+    @property
+    def has_identification(self) -> bool:
+        return bool(self.aas_id or self.global_asset_id)
+
+    def identification_fields(self) -> tuple[tuple[str, str], ...]:
+        """값이 있는 Identification 자식만. 빈 노드는 만들지 않는다."""
+        fields: list[tuple[str, str]] = []
+        if self.aas_id:
+            fields.append(("AasId", self.aas_id))
+        if self.global_asset_id:
+            fields.append(("GlobalAssetId", self.global_asset_id))
+        if self.device_key:
+            fields.append(("DeviceKey", self.device_key))
+        return tuple(fields)
+
+    def object_segments(self, auto_root: str) -> tuple[str, ...]:
+        """북향에서 이 collector 의 객체 경로. auto 노드와 같은 부모다."""
+        return (auto_root, self.kind, self.device_key)
+
+
 class TagSettings(BaseModel):
     tag_id: str
     enabled: bool = True
@@ -90,10 +127,19 @@ class TagSettings(BaseModel):
 
 
 class TagMapFile(BaseModel):
+    collectors: list[CollectorHeader] = Field(default_factory=list)
     tags: list[TagSettings] = Field(default_factory=list)
 
     @model_validator(mode="after")
     def _unique(self) -> TagMapFile:
+        seen_collectors: set[tuple[str, str]] = set()
+        for header in self.collectors:
+            if header.key in seen_collectors:
+                raise ValueError(f"중복된 collector: {header.kind}/{header.device_key}")
+            seen_collectors.add(header.key)
+            if header.has_identification and header.kind == RESERVED_ROOT:
+                raise ValueError(f"collector.kind 로 {RESERVED_ROOT} 를 쓸 수 없습니다")
+
         seen_ids: set[str] = set()
         seen_targets: set[tuple[tuple[str, ...], str]] = set()
         for tag in self.tags:
@@ -109,3 +155,23 @@ class TagMapFile(BaseModel):
                 )
             seen_targets.add(target_key)
         return self
+
+
+def identification_placements(
+    collectors: list[CollectorHeader], auto_root: str
+) -> list[tuple[tuple[str, ...], CollectorHeader]]:
+    """collector 객체 아래에 Identification 을 한 번만 둔다."""
+    placements: list[tuple[tuple[str, ...], CollectorHeader]] = []
+    seen: set[tuple[str, ...]] = set()
+    root = auto_root.strip() or "Collectors"
+    if root.split("/")[0] == RESERVED_ROOT:
+        return placements
+    for header in collectors:
+        if not header.has_identification:
+            continue
+        segments = header.object_segments(root)
+        if segments in seen:
+            continue
+        seen.add(segments)
+        placements.append((segments, header))
+    return placements

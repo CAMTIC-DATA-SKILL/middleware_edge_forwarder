@@ -6,7 +6,7 @@ from pathlib import Path
 
 from pydantic import BaseModel, Field
 
-from model.tag_model import TagSettings
+from model.tag_model import CollectorHeader, TagSettings
 
 
 class ZmqSettings(BaseModel):
@@ -63,3 +63,4 @@ class Settings(BaseModel):
     # 파일이 없으면 None (auto 노드만 사용)
     tag_map_file: Path | None = None
     tags: list[TagSettings] = Field(default_factory=list)
+    collectors: list[CollectorHeader] = Field(default_factory=list)

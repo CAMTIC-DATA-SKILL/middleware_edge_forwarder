@@ -22,7 +22,7 @@ from client.errors import ClientError
 from model.app_model import Settings
 from model.ipc_model import IpcMessage, source_id
 from model.protocol_model import MsgDataDTO, MsgHealthDTO, MsgSampleDTO, MsgTypeEnum
-from model.tag_model import TagConversion, TagSettings
+from model.tag_model import CollectorHeader, TagConversion, TagSettings, identification_placements
 from opcua_server.server import NorthboundServer, TagNodeSpec
 from opcua_server.values import infer_variant_type, status_for_error
 from utils.message_log import MessageLog
@@ -70,6 +70,9 @@ class Forwarder:
         for tag in settings.tags:
             if tag.enabled:
                 self._index.setdefault(tag.source.key, []).append(tag)
+        self._headers: dict[tuple[str, str], CollectorHeader] = {
+            header.key: header for header in settings.collectors
+        }
         self._sources: dict[str, _SourceState] = {}
         self._auto_skipped: set[str] = set()
         self.messages_received = 0
@@ -131,12 +134,23 @@ class Forwarder:
                     unit=tag.target.unit,
                 )
             )
+        await self._register_identifications()
         logger.info(
             "tag map 태그 %d개 등록 (전체 %d개, auto=%s)",
             len(enabled),
             len(self.settings.tags),
             self.settings.app.opcua.auto_create_nodes,
         )
+
+    async def _register_identifications(self) -> None:
+        count = 0
+        for segments, header in identification_placements(
+            self.settings.collectors, self.settings.app.opcua.auto_root
+        ):
+            if await self.server.add_identification(segments, header.identification_fields()):
+                count += 1
+        if count:
+            logger.info("Identification %d개 등록 (collector %d개)", count, len(self.settings.collectors))
 
     async def _connect_ipc(self, stop: asyncio.Event) -> bool:
         """연결될 때까지 재시도. stop 되면 False."""
@@ -193,6 +207,7 @@ class Forwarder:
         body = MsgDataDTO.model_validate(msg.header.msg_body)
         sid = source_id(msg.kind, body.device_key)
         state = await self._ensure_source(sid)
+        await self._ensure_collector_identification(msg.kind, body.device_key)
         sample_ts = datetime.fromtimestamp(body.sample_ms / 1000.0, tz=timezone.utc)
 
         for sample in body.samples:
@@ -216,6 +231,7 @@ class Forwarder:
         body = MsgHealthDTO.model_validate(msg.header.msg_body)
         sid = source_id(msg.kind, body.device_key)
         state = await self._ensure_source(sid)
+        await self._ensure_collector_identification(msg.kind, body.device_key)
         changed = state.device_ok is not body.device_ok
         state.device_ok = body.device_ok
         await self.server.set_source_state(sid, device_ok=body.device_ok, reason=body.reason or "")
@@ -225,6 +241,16 @@ class Forwarder:
             return
         n = await self.server.mark_source_tags(sid, _UNCERTAIN)
         logger.warning("[%s] HEALTH device_ok=false reason=%s → 태그 %d개 Uncertain", sid, body.reason, n)
+
+    async def _ensure_collector_identification(self, kind: str, device_key: str) -> None:
+        """수신한 collector id 로 헤더를 찾아 Identification 을 붙인다."""
+        header = self._headers.get((kind, device_key))
+        if header is None or not header.has_identification:
+            return
+        await self.server.add_identification(
+            header.object_segments(self.settings.app.opcua.auto_root),
+            header.identification_fields(),
+        )
 
     async def _ensure_source(self, sid: str) -> _SourceState:
         state = self._sources.get(sid)

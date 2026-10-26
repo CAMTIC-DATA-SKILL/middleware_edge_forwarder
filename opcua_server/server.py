@@ -10,7 +10,7 @@ from typing import Any
 from asyncua import Node, Server, ua
 
 from model.app_model import OpcUaServerSettings
-from model.tag_model import RESERVED_ROOT
+from model.tag_model import IDENTIFICATION_BROWSE_NAME, RESERVED_ROOT
 from opcua_server.values import coerce_value
 
 logger = logging.getLogger(__name__)
@@ -54,6 +54,7 @@ class NorthboundServer:
 
     - 태그는 실행 중에도 추가할 수 있다 (tag map 은 시작 시, auto 노드는 첫 샘플 수신 시).
     - 값을 받기 전까지 StatusCode 는 BadWaitingForInitialData.
+    - tag map `collectors` 헤더가 있으면 해당 collector 객체 아래에 `Identification` 상수를 둔다.
     - `_Forwarder` 아래에 프로세스·수집원 상태 노드를 둔다. 상위 쓰기는 허용하지 않는다.
     """
 
@@ -154,6 +155,33 @@ class NorthboundServer:
         self._tags[spec.tag_id] = _TagNode(node_id, spec.vtype, spec.source_id)
         await self._write_status(self._status.get("TagCount"), len(self._tags), ua.VariantType.UInt32)
         logger.debug("태그 추가: %s (%s/%s, %s)", spec.tag_id, "/".join(spec.segments), spec.name, spec.vtype.name)
+        return True
+
+    async def add_identification(self, segments: tuple[str, ...], fields: tuple[tuple[str, str], ...]) -> bool:
+        """설비 경로 아래에 Identification 상수 노드를 만든다. 이미 있으면 False."""
+        if self._server is None or not fields or not segments or segments[0] == RESERVED_ROOT:
+            return False
+        if not any(name in ("AasId", "GlobalAssetId") for name, _ in fields):
+            return False
+        ident_segments = (*segments, IDENTIFICATION_BROWSE_NAME)
+        if ident_segments in self._objects:
+            return False
+        parent = await self._ensure_object_path(segments)
+        ident = await parent.add_object(
+            ua.NodeId("/".join(ident_segments), self._ns),
+            ua.QualifiedName(IDENTIFICATION_BROWSE_NAME, self._ns),
+        )
+        self._objects[ident_segments] = ident
+        for name, value in fields:
+            variable = await ident.add_variable(
+                ua.NodeId("/".join((*ident_segments, name)), self._ns),
+                ua.QualifiedName(name, self._ns),
+                value,
+                varianttype=ua.VariantType.String,
+                datatype=_data_type_id(ua.VariantType.String),
+            )
+            await variable.set_writable(False)
+        logger.debug("Identification 추가: %s", "/".join(ident_segments))
         return True
 
     async def update(
