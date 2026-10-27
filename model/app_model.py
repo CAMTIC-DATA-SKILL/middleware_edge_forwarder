@@ -33,6 +33,8 @@ class OpcUaServerSettings(BaseModel):
     # tag map 에 없는 샘플도 {auto_root}/{kind}/{device_key}/{addr} 로 노출
     auto_create_nodes: bool = True
     auto_root: str = "Collectors"
+    # 북향 노드 값 반영 주기. collector 수신이 더 빨라도 이 간격으로만 갱신 (0 = 수신 즉시)
+    update_period_ms: int = Field(default=0, ge=0)
 
 
 class IpcLogSettings(BaseModel):

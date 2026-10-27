@@ -96,6 +96,7 @@ def _load_app_from_env() -> AppSettings:
             ),
             auto_create_nodes=_env_bool("OPCUA_AUTO_CREATE_NODES", True),
             auto_root=_env_str("OPCUA_AUTO_ROOT", "Collectors"),
+            update_period_ms=max(0, _env_int("OPCUA_UPDATE_PERIOD_MS", 0)),
         ),
         ipc_log=IpcLogSettings(
             summary=_env_bool("IPC_LOG_SUMMARY", True),

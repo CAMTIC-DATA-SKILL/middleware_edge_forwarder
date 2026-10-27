@@ -84,6 +84,7 @@ collector가 여러 개(포트가 다름)라면 `ZMQ_SUB_ENDPOINTS`에 쉼표로
 | `OPCUA_ENDPOINT` | `opc.tcp://0.0.0.0:4840/edge/` | 북향 서버 주소 |
 | `OPCUA_NAMESPACE_URI` | `urn:middleware:edge:forwarder:tags` | 상위 시스템은 이 URI로 네임스페이스 번호를 찾습니다 |
 | `OPCUA_AUTO_CREATE_NODES` | `true` | tag map에 없는 샘플도 자동 노출 |
+| `OPCUA_UPDATE_PERIOD_MS` | `0` | 북향 노드 값 반영 주기. collector가 더 자주 보내도 이 간격으로만 갱신 (0 = 수신 즉시) |
 | `SOURCE_STALE_MS` | `10000` | 이 시간 동안 DATA가 없으면 해당 수집원 태그를 Uncertain 처리 (0 = 끔) |
 
 전체 목록은 `.env.example`을 참고합니다.

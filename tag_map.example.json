@@ -106,6 +106,42 @@
       "target": { "path": "OperationalData/Axis/JointPosition", "name": "J6", "data_type": "Float" }
     },
     {
+      "tag_id": "jv1.value_0",
+      "node_id": 1160,
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv1", "field": "value_0" },
+      "target": { "path": "OperationalData/Axis/JointSpeed", "name": "J1", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv1.value_1",
+      "node_id": 1161,
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv1", "field": "value_1" },
+      "target": { "path": "OperationalData/Axis/JointSpeed", "name": "J2", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv1.value_2",
+      "node_id": 1162,
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv1", "field": "value_2" },
+      "target": { "path": "OperationalData/Axis/JointSpeed", "name": "J3", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv2.value_0",
+      "node_id": 1163,
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv2", "field": "value_0" },
+      "target": { "path": "OperationalData/Axis/JointSpeed", "name": "J4", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv2.value_1",
+      "node_id": 1164,
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv2", "field": "value_1" },
+      "target": { "path": "OperationalData/Axis/JointSpeed", "name": "J5", "data_type": "Float" }
+    },
+    {
+      "tag_id": "jv2.value_2",
+      "node_id": 1165,
+      "source": { "kind": "robot", "device_key": "robot-1", "socket": "jv2", "field": "value_2" },
+      "target": { "path": "OperationalData/Axis/JointSpeed", "name": "J6", "data_type": "Float" }
+    },
+    {
       "tag_id": "tcp.value_0",
       "node_id": 1152,
       "source": { "kind": "robot", "device_key": "robot-1", "socket": "tool_pos1", "field": "value_0" },

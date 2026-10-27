@@ -3,6 +3,7 @@ IPC(ZeroMQ) 수신 → 북향 OPC UA 반영 루프.
 
 collector DATA 샘플을 tag map(또는 auto 노드)에 따라 북향 노드 값으로 쓰고,
 HEALTH·수신 공백을 수집원 상태와 태그 품질에 반영한다.
+OPCUA_UPDATE_PERIOD_MS 가 있으면 수신 즉시가 아니라 그 주기로 최신 값만 반영한다.
 """
 
 from __future__ import annotations
@@ -42,6 +43,15 @@ class _SourceState:
     device_ok: bool | None = None
 
 
+@dataclass
+class _PendingWrite:
+    tag_id: str
+    value: object
+    sample_ts: datetime
+    conversion: TagConversion
+    error: str | None = None
+
+
 class Forwarder:
     def __init__(
         self,
@@ -79,9 +89,11 @@ class Forwarder:
             header.key: header for header in settings.collectors
         }
         self._sources: dict[str, _SourceState] = {}
+        self._pending: dict[str, _PendingWrite] = {}
         self._auto_skipped: set[str] = set()
         self.messages_received = 0
         self.messages_invalid = 0
+        self._update_period_ms = max(0, app.opcua.update_period_ms)
 
     def _collector_ref(self, kind: str, device_key: str) -> str:
         return collector_ref(kind, device_key, root=self.settings.app.zmq.topic_root)
@@ -102,6 +114,9 @@ class Forwarder:
                 asyncio.create_task(self._recv_loop(), name="ipc-recv"),
                 asyncio.create_task(self._watch_loop(), name="source-watch"),
             ]
+            if self._update_period_ms > 0:
+                tasks.append(asyncio.create_task(self._flush_loop(), name="opcua-flush"))
+                logger.info("북향 OPC UA 값 반영 주기 %dms", self._update_period_ms)
             try:
                 await stop.wait()
             finally:
@@ -110,6 +125,7 @@ class Forwarder:
                 for task in tasks:
                     with contextlib.suppress(asyncio.CancelledError):
                         await task
+                await self._flush_pending()
         finally:
             self.ipc.close()
             self.message_log.close()
@@ -212,6 +228,7 @@ class Forwarder:
                 if (now - state.last_data_mono) * 1000 < stale_ms:
                     continue
                 state.stale = True
+                await self._flush_pending()
                 await self.server.set_source_state(sid, stale=True)
                 n = await self.server.mark_source_tags(sid, _UNCERTAIN)
                 logger.warning("[%s] DATA %dms 동안 없음 → 태그 %d개 Uncertain", self._collector_ref_sid(sid), stale_ms, n)
@@ -255,6 +272,7 @@ class Forwarder:
             if changed:
                 logger.info("[%s] HEALTH device_ok=true", self._collector_ref(msg.kind, body.device_key))
             return
+        await self._flush_pending()
         n = await self.server.mark_source_tags(sid, _UNCERTAIN)
         logger.warning(
             "[%s] HEALTH device_ok=false reason=%s → 태그 %d개 Uncertain",
@@ -380,6 +398,35 @@ class Forwarder:
         await self._write_value(tag_id, sample.value, sample_ts, conversion, error=sample.error)
 
     async def _write_value(
+        self,
+        tag_id: str,
+        value: object,
+        sample_ts: datetime,
+        conversion: TagConversion,
+        error: str | None = None,
+    ) -> None:
+        if error is None and value is None:
+            return
+        if self._update_period_ms > 0:
+            self._pending[tag_id] = _PendingWrite(tag_id, value, sample_ts, conversion, error)
+            return
+        await self._apply_write(tag_id, value, sample_ts, conversion, error)
+
+    async def _flush_loop(self) -> None:
+        delay_s = max(0.001, self._update_period_ms / 1000.0)
+        while True:
+            await asyncio.sleep(delay_s)
+            await self._flush_pending()
+
+    async def _flush_pending(self) -> None:
+        if not self._pending:
+            return
+        pending = self._pending
+        self._pending = {}
+        for item in pending.values():
+            await self._apply_write(item.tag_id, item.value, item.sample_ts, item.conversion, item.error)
+
+    async def _apply_write(
         self,
         tag_id: str,
         value: object,

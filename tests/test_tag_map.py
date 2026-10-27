@@ -55,12 +55,16 @@ class CollectorHeaderTest(unittest.TestCase):
     def test_example_tag_map_validates(self) -> None:
         tag_map = TagMapFile.model_validate_json(EXAMPLE.read_text(encoding="utf-8"))
         self.assertTrue(any(c.key == ("robot", "robot-1") for c in tag_map.collectors))
+        self.assertTrue({1737, 1703}.issubset({tag.node_id for tag in tag_map.tags if tag.node_id is not None}))
         self.assertEqual(
-            {tag.node_id for tag in tag_map.tags if tag.node_id is not None},
-            {1739, 1737, 1703},
+            {tag.node_id for tag in tag_map.tags if tag.target.path.endswith("JointSpeed")},
+            {1160, 1161, 1162, 1163, 1164, 1165},
         )
         self.assertTrue(
             any(t.source.socket == "hw" and t.source.field == "cpu_temperature" for t in tag_map.tags)
+        )
+        self.assertTrue(
+            any(t.source.socket == "jv1" and t.source.field == "value_0" for t in tag_map.tags)
         )
 
     def test_socket_source_requires_field(self) -> None:
