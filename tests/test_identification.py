@@ -43,13 +43,14 @@ def _header(**overrides: object) -> CollectorHeader:
     return CollectorHeader.model_validate(values)
 
 
-def _tag_spec(tag_id: str, name: str) -> TagNodeSpec:
+def _tag_spec(tag_id: str, name: str, node_id: int | None = None) -> TagNodeSpec:
     return TagNodeSpec(
         tag_id=tag_id,
         segments=tuple(COLLECTOR_PATH.split("/")),
         name=name,
         vtype=ua.VariantType.Boolean,
         source_id="robot/robot-1",
+        node_id=node_id,
     )
 
 
@@ -108,6 +109,21 @@ class IdentificationNodeTest(unittest.IsolatedAsyncioTestCase):
                 )
                 with self.assertRaises(ua.UaError):
                     await client.get_node(ua.NodeId(f"{COLLECTOR_PATH}/Identification/AasId", ns)).read_browse_name()
+        finally:
+            await server.stop()
+
+    async def test_numeric_node_id_is_integer_identifier(self) -> None:
+        endpoint = _free_endpoint()
+        server = NorthboundServer(_cfg(endpoint))
+        await server.start()
+        try:
+            await server.add_tag(_tag_spec("1739", "PowerYesno", node_id=1739))
+            async with Client(url=endpoint) as client:
+                ns = await client.get_namespace_index(NS_URI)
+                node = client.get_node(ua.NodeId(1739, ns))
+                self.assertEqual((await node.read_browse_name()).Name, "PowerYesno")
+                self.assertEqual(node.nodeid.Identifier, 1739)
+                self.assertNotEqual(node.nodeid.NodeIdType, ua.NodeIdType.String)
         finally:
             await server.stop()
 

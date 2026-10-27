@@ -55,6 +55,44 @@ class CollectorHeaderTest(unittest.TestCase):
     def test_example_tag_map_validates(self) -> None:
         tag_map = TagMapFile.model_validate_json(EXAMPLE.read_text(encoding="utf-8"))
         self.assertTrue(any(c.key == ("robot", "robot-1") for c in tag_map.collectors))
+        self.assertEqual(
+            {tag.node_id for tag in tag_map.tags if tag.node_id is not None},
+            {1739, 1737, 1703},
+        )
+        self.assertTrue(
+            any(t.source.socket == "hw" and t.source.field == "cpu_temperature" for t in tag_map.tags)
+        )
+
+    def test_socket_source_requires_field(self) -> None:
+        with self.assertRaises(ValidationError):
+            TagMapFile.model_validate(
+                {"tags": [_tag() | {"source": {"kind": "robot", "device_key": "robot-1", "socket": "hw"}}]}
+            )
+
+    def test_addr_and_socket_together_is_error(self) -> None:
+        with self.assertRaises(ValidationError):
+            TagMapFile.model_validate(
+                {
+                    "tags": [
+                        _tag()
+                        | {
+                            "source": {
+                                "kind": "robot",
+                                "device_key": "robot-1",
+                                "addr": "S0004",
+                                "socket": "hw",
+                                "field": "cpu_temperature",
+                            }
+                        }
+                    ]
+                }
+            )
+
+    def test_duplicate_node_id_is_error(self) -> None:
+        with self.assertRaises(ValidationError):
+            TagMapFile.model_validate(
+                {"tags": [_tag("1739") | {"node_id": 1739}, _tag("1737") | {"node_id": 1739}]}
+            )
 
 
 if __name__ == "__main__":

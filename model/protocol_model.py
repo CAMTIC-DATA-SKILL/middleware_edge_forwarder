@@ -10,7 +10,7 @@ from enum import StrEnum
 from typing import List, Optional, Union
 from uuid import UUID
 
-from pydantic import BaseModel, model_validator
+from pydantic import BaseModel, Field, model_validator
 
 
 class MsgTypeEnum(StrEnum):
@@ -51,21 +51,38 @@ class MsgHealthDTO(BaseModel):
         return _alias_device_address(data)
 
 
+_SocketValue = Union[bool, int, float, str, list]
+
+
 class MsgSampleDTO(BaseModel):
-    # plc: D100 / D800.0 / D100~101, robot: 0.8~F 등 collector 가 파싱한 주소
+    # plc: D100 / D800.0 / D100~101, robot: S0004 등 collector 가 파싱한 주소
     addr: str
     # plc: word|bit|int|long word|ascii, robot: u16|i16|f32 …
     type: Optional[str] = None
-    value: Optional[Union[bool, int, float, str, list]] = None
+    value: Optional[_SocketValue] = None
     error: Optional[str] = None
     # robot collector 처럼 포인트 이름을 싣는 경우
     name: Optional[str] = None
+
+
+class MsgSocketDTO(BaseModel):
+    """HI6 S relay 소켓 한 자리. collector DATA `sockets[]` 와 같다."""
+
+    name: str
+    s_block: Optional[int] = None
+    command: Optional[int] = None
+    command_name: Optional[str] = None
+    params: dict[str, Union[int, float, str]] = Field(default_factory=dict)
+    value: Optional[dict[str, _SocketValue]] = None
+    blocks: Optional[list[int]] = None
+    error: Optional[str] = None
 
 
 class MsgDataDTO(BaseModel):
     device_key: str
     sample_ms: int
     samples: List[MsgSampleDTO]
+    sockets: List[MsgSocketDTO] = Field(default_factory=list)
 
     @model_validator(mode="before")
     @classmethod

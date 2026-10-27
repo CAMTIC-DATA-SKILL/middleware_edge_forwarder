@@ -22,7 +22,7 @@ _TYPE_MISMATCH = ua.StatusCode(ua.StatusCodes.BadTypeMismatch)
 
 @dataclass(frozen=True)
 class TagNodeSpec:
-    """북향 변수 노드 하나. NodeId 는 s=<tag_id> 로 고정한다."""
+    """북향 변수 노드 하나. node_id 가 있으면 i=<node_id>, 없으면 s=<tag_id>."""
 
     tag_id: str
     segments: tuple[str, ...]
@@ -31,6 +31,7 @@ class TagNodeSpec:
     source_id: str
     description: str = ""
     unit: str = ""
+    node_id: int | None = None
 
 
 @dataclass(frozen=True)
@@ -124,7 +125,7 @@ class NorthboundServer:
         if self._server is None or spec.tag_id in self._tags:
             return False
         parent = await self._ensure_object_path(spec.segments)
-        node_id = ua.NodeId(spec.tag_id, self._ns)
+        node_id = ua.NodeId(spec.node_id, self._ns) if spec.node_id is not None else ua.NodeId(spec.tag_id, self._ns)
         variable = await parent.add_variable(
             node_id,
             ua.QualifiedName(spec.name, self._ns),

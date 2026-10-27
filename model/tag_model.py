@@ -1,4 +1,4 @@
-"""tag map 스키마: collector 샘플(kind, device_key, addr) → 북향 OPC UA 노드."""
+"""tag map 스키마: collector 샘플·소켓 필드 → 북향 OPC UA 노드."""
 
 from __future__ import annotations
 
@@ -24,6 +24,7 @@ OpcUaDataType = Literal[
     "Float",
     "Double",
     "String",
+    "DateTime",
 ]
 
 
@@ -37,14 +38,41 @@ def _no_dot(v: str) -> str:
 class TagSource(BaseModel):
     kind: str = "plc"
     device_key: str
-    addr: str
+    # samples[].addr. socket 을 쓰면 비운다
+    addr: str = ""
+    # sockets[].name. addr 를 쓰면 비운다
+    socket: str = ""
+    # sockets[].value 의 키
+    field: str = ""
 
     _validate_kind = field_validator("kind")(_no_dot)
     _validate_device_key = field_validator("device_key")(_no_dot)
 
     @property
+    def is_socket(self) -> bool:
+        return bool(self.socket)
+
+    @property
     def key(self) -> tuple[str, str, str]:
         return (self.kind, self.device_key, self.addr)
+
+    @property
+    def socket_key(self) -> tuple[str, str, str, str]:
+        return (self.kind, self.device_key, self.socket, self.field)
+
+    @model_validator(mode="after")
+    def _one_ref(self) -> TagSource:
+        has_addr = bool(self.addr)
+        has_socket = bool(self.socket)
+        if has_addr and has_socket:
+            raise ValueError("source.addr 와 source.socket 을 같이 쓸 수 없습니다")
+        if not has_addr and not has_socket:
+            raise ValueError("source.addr 또는 source.socket 이 필요합니다")
+        if has_socket and not self.field:
+            raise ValueError("source.socket 이면 source.field 가 필요합니다")
+        if self.field and not has_socket:
+            raise ValueError("source.field 는 source.socket 과 같이 씁니다")
+        return self
 
 
 class TagTarget(BaseModel):
@@ -120,6 +148,8 @@ class CollectorHeader(BaseModel):
 
 class TagSettings(BaseModel):
     tag_id: str
+    # 있으면 북향 변수 NodeId 를 i=<node_id> 로 만든다. 없으면 s=<tag_id>
+    node_id: int | None = Field(default=None, ge=1)
     enabled: bool = True
     source: TagSource
     target: TagTarget
@@ -141,11 +171,16 @@ class TagMapFile(BaseModel):
                 raise ValueError(f"collector.kind 로 {RESERVED_ROOT} 를 쓸 수 없습니다")
 
         seen_ids: set[str] = set()
+        seen_node_ids: set[int] = set()
         seen_targets: set[tuple[tuple[str, ...], str]] = set()
         for tag in self.tags:
             if tag.tag_id in seen_ids:
                 raise ValueError(f"중복된 tag_id: {tag.tag_id}")
             seen_ids.add(tag.tag_id)
+            if tag.node_id is not None:
+                if tag.node_id in seen_node_ids:
+                    raise ValueError(f"중복된 node_id: {tag.node_id}")
+                seen_node_ids.add(tag.node_id)
             if not tag.enabled:
                 continue
             target_key = (tag.target.segments, tag.target.name)

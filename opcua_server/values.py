@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import math
+from datetime import datetime, timezone
 from typing import Any
 
 from asyncua import ua
@@ -107,5 +108,16 @@ def coerce_value(value: Any, vtype: ua.VariantType) -> Any:
         if isinstance(value, list):
             raise TypeError(f"String 으로 변환할 수 없습니다: {value!r}")
         return value if isinstance(value, str) else str(value)
+
+    if vtype is ua.VariantType.DateTime:
+        if isinstance(value, datetime):
+            return value if value.tzinfo else value.replace(tzinfo=timezone.utc)
+        if isinstance(value, str):
+            text = value.strip()
+            if text.endswith("Z"):
+                text = f"{text[:-1]}+00:00"
+            parsed = datetime.fromisoformat(text)
+            return parsed if parsed.tzinfo else parsed.replace(tzinfo=timezone.utc)
+        raise TypeError(f"DateTime 으로 변환할 수 없습니다: {value!r}")
 
     raise TypeError(f"지원하지 않는 형식: {vtype.name}")

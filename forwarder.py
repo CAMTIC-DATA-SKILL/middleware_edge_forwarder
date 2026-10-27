@@ -21,7 +21,7 @@ from pydantic import ValidationError
 from client.errors import ClientError
 from model.app_model import Settings
 from model.ipc_model import IpcMessage, collector_ref, source_id
-from model.protocol_model import MsgDataDTO, MsgHealthDTO, MsgSampleDTO, MsgTypeEnum
+from model.protocol_model import MsgDataDTO, MsgHealthDTO, MsgSampleDTO, MsgSocketDTO, MsgTypeEnum
 from model.tag_model import CollectorHeader, TagConversion, TagSettings, identification_placements
 from opcua_server.server import NorthboundServer, TagNodeSpec
 from opcua_server.values import infer_variant_type, status_for_error
@@ -67,8 +67,13 @@ class Forwarder:
         self.server = server or NorthboundServer(app.opcua)
         self.message_log = message_log or MessageLog(app.ipc_log)
         self._index: dict[tuple[str, str, str], list[TagSettings]] = {}
+        self._socket_index: dict[tuple[str, str, str, str], list[TagSettings]] = {}
         for tag in settings.tags:
-            if tag.enabled:
+            if not tag.enabled:
+                continue
+            if tag.source.is_socket:
+                self._socket_index.setdefault(tag.source.socket_key, []).append(tag)
+            else:
                 self._index.setdefault(tag.source.key, []).append(tag)
         self._headers: dict[tuple[str, str], CollectorHeader] = {
             header.key: header for header in settings.collectors
@@ -139,6 +144,7 @@ class Forwarder:
                     source_id=sid,
                     description=tag.target.description,
                     unit=tag.target.unit,
+                    node_id=tag.node_id,
                 )
             )
         await self._register_identifications()
@@ -227,6 +233,9 @@ class Forwarder:
             if tag_id is not None:
                 await self._write_sample(tag_id, sample, sample_ts, _NO_CONVERSION)
 
+        for sock in body.sockets:
+            await self._on_socket(msg.kind, body.device_key, sock, sample_ts)
+
         state.last_data_mono = time.monotonic()
         if state.stale:
             state.stale = False
@@ -271,6 +280,30 @@ class Forwarder:
             await self.server.ensure_source(sid)
         return state
 
+    async def _on_socket(self, kind: str, device_key: str, sock: MsgSocketDTO, sample_ts: datetime) -> None:
+        if sock.error:
+            for tag in self._mapped_socket_tags(kind, device_key, sock.name):
+                await self._write_value(tag.tag_id, None, sample_ts, tag.conversion, error=sock.error)
+            return
+        if sock.value is None:
+            return
+        for field, value in sock.value.items():
+            mapped = self._socket_index.get((kind, device_key, sock.name, field))
+            if mapped:
+                for tag in mapped:
+                    await self._write_value(tag.tag_id, value, sample_ts, tag.conversion)
+                continue
+            tag_id = await self._ensure_auto_socket_tag(kind, device_key, sock, field, value)
+            if tag_id is not None:
+                await self._write_value(tag_id, value, sample_ts, _NO_CONVERSION)
+
+    def _mapped_socket_tags(self, kind: str, device_key: str, name: str) -> list[TagSettings]:
+        tags: list[TagSettings] = []
+        for (k, device, socket_name, _), mapped in self._socket_index.items():
+            if (k, device, socket_name) == (kind, device_key, name):
+                tags.extend(mapped)
+        return tags
+
     async def _ensure_auto_tag(self, kind: str, device_key: str, sample: MsgSampleDTO) -> str | None:
         opcua = self.settings.app.opcua
         if not opcua.auto_create_nodes:
@@ -301,6 +334,42 @@ class Forwarder:
             logger.info("auto 노드 생성: %s (%s)", tag_id, vtype.name)
         return tag_id
 
+    async def _ensure_auto_socket_tag(
+        self,
+        kind: str,
+        device_key: str,
+        sock: MsgSocketDTO,
+        field: str,
+        value: object,
+    ) -> str | None:
+        opcua = self.settings.app.opcua
+        if not opcua.auto_create_nodes:
+            return None
+        tag_id = f"{kind}.{device_key}.{sock.name}.{field}"
+        if self.server.has_tag(tag_id):
+            return tag_id
+        if tag_id in self._auto_skipped:
+            return None
+        vtype = infer_variant_type(None, value)
+        if vtype is None:
+            if value is not None:
+                self._auto_skipped.add(tag_id)
+                logger.warning("auto 노드 형식을 정할 수 없어 건너뜀: %s value=%r", tag_id, value)
+            return None
+        added = await self.server.add_tag(
+            TagNodeSpec(
+                tag_id=tag_id,
+                segments=(opcua.auto_root, kind, device_key, sock.name),
+                name=field,
+                vtype=vtype,
+                source_id=source_id(kind, device_key),
+                description=f"{sock.command_name or sock.name} {field}".strip(),
+            )
+        )
+        if added:
+            logger.info("auto 노드 생성: %s (%s)", tag_id, vtype.name)
+        return tag_id
+
     async def _write_sample(
         self,
         tag_id: str,
@@ -308,12 +377,22 @@ class Forwarder:
         sample_ts: datetime,
         conversion: TagConversion,
     ) -> None:
-        if sample.error:
-            await self.server.update(tag_id, None, status=status_for_error(sample.error), source_timestamp=sample_ts)
+        await self._write_value(tag_id, sample.value, sample_ts, conversion, error=sample.error)
+
+    async def _write_value(
+        self,
+        tag_id: str,
+        value: object,
+        sample_ts: datetime,
+        conversion: TagConversion,
+        error: str | None = None,
+    ) -> None:
+        if error:
+            await self.server.update(tag_id, None, status=status_for_error(error), source_timestamp=sample_ts)
             return
-        if sample.value is None:
+        if value is None:
             return
-        await self.server.update(tag_id, conversion.apply(sample.value), source_timestamp=sample_ts)
+        await self.server.update(tag_id, conversion.apply(value), source_timestamp=sample_ts)
 
 
 async def run(settings: Settings) -> None:
