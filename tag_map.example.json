@@ -3,8 +3,8 @@
     {
       "kind": "robot",
       "device_key": "robot-1",
-      "aas_id": "urn:example:aas:hyundai:hh7:pickplace:01",
-      "global_asset_id": "urn:example:asset:hyundai:hh7:pickplace:01"
+      "aas_id": "urn:physical-ai:aas:hyundai:hh7:template:v0.2",
+      "global_asset_id": "urn:physical-ai:aas:hyundai:hh7:template:v0.2"
     }
   ],
   "tags": [
