@@ -1,0 +1,81 @@
+{
+    "comment": "미들웨어 내부 표. OPC-UA NodeId는 engineering.csv 그대로. 모드버스 주소만 현장에 맞게 바꾼다.",
+    "aasId": "urn:example:aas:hyundai:hh7:pickplace:01",
+    "opcua": {
+      "namespaceIndex": 1,
+      "namespaceUri": "https://camtic.or.kr/opcua/aas/Hyundai_HH7_PickPlace_AdsorptionGripper_InstanceAAS_v0.2_fixed (1)/5e78074d8e74"
+    },
+    "modbus": {
+      "host": "127.0.0.1",
+      "port": 502,
+      "unitId": 1,
+      "pollMs": 200
+    },
+    "bindings": [
+      {
+        "nodeId": "ns=1;i=1739",
+        "browseName": "PowerYesno",
+        "dataType": "Boolean",
+        "aasPath": "OperationalData/ActualDataMonitoring.EquipmentState.PowerYesno",
+        "modbus": {
+          "function": "holding",
+          "address": 0,
+          "quantity": 1,
+          "scale": 1,
+          "decode": "uint16_as_bool"
+        }
+      },
+      {
+        "nodeId": "ns=1;i=1737",
+        "browseName": "OperationType",
+        "dataType": "String",
+        "aasPath": "OperationalData/ActualDataMonitoring.EquipmentState.OperationType",
+        "modbus": {
+          "function": "holding",
+          "address": 1,
+          "quantity": 1,
+          "scale": 1,
+          "decode": "uint16_as_enum",
+          "enum": { "0": "stop", "1": "run", "2": "wait" }
+        }
+      },
+      {
+        "nodeId": "ns=1;i=1703",
+        "browseName": "MeasurementTemperature",
+        "dataType": "Float",
+        "aasPath": "OperationalData/ActualDataMonitoring.EnvironmentData.MeasurementTemperature",
+        "modbus": {
+          "function": "holding",
+          "address": 10,
+          "quantity": 2,
+          "scale": 0.1,
+          "decode": "int32"
+        }
+      },
+      {
+        "nodeId": "ns=1;i=1713",
+        "browseName": "GrippingStatus",
+        "dataType": "String",
+        "aasPath": "OperationalData/ActualDataMonitoring.EquipmentState.Endeffector.AdsorptionGripper.GrippingStatus",
+        "modbus": {
+          "function": "holding",
+          "address": 20,
+          "quantity": 1,
+          "decode": "uint16_as_string"
+        }
+      },
+      {
+        "nodeId": "ns=1;i=1808",
+        "browseName": "Timestamp",
+        "dataType": "DateTime",
+        "aasPath": "OperationalData/Timestamp",
+        "modbus": {
+          "function": "holding",
+          "address": 30,
+          "quantity": 6,
+          "decode": "ymd_hms"
+        }
+      }
+    ]
+  }
+  
